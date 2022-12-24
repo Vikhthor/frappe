@@ -17,16 +17,22 @@ expected_settings_10_3_later = {
 	"collation_server": "utf8mb4_unicode_ci"
 }
 
+expected_settings_google_8_0_later = {
+	"character_set_server": "utf8mb4",
+	"collation_server": "utf8mb4_unicode_ci"
+}
 
 def get_mariadb_versions():
 	# MariaDB classifies their versions as Major (1st and 2nd number), and Minor (3rd number)
 	# Example: Version 10.3.13 is Major Version = 10.3, Minor Version = 13
 	mariadb_variables = frappe._dict(frappe.db.sql("""show variables"""))
 	version_string = mariadb_variables.get('version').split('-')[0]
+	provider = mariadb_variables.get('version').split('-')[1]
 	versions = {}
 	versions['major'] = version_string.split(
 		'.')[0] + '.' + version_string.split('.')[1]
 	versions['minor'] = version_string.split('.')[2]
+	versions['provider'] = provider
 	return versions
 
 
@@ -87,7 +93,7 @@ def drop_user_and_database(db_name, root_login, root_password):
 
 def bootstrap_database(db_name, verbose, source_sql=None):
 	frappe.connect(db_name=db_name)
-	if not check_database_settings():
+	if not check_database_settings(db_name):
 		print('Database settings do not match expected values; stopping database setup.')
 		sys.exit(1)
 
@@ -108,20 +114,35 @@ def import_db_from_sql(source_sql=None, verbose=False):
 	if verbose: print("Imported from database %s" % source_sql)
 
 
-def check_database_settings():
+def check_database_settings(db_name=None):
 	versions = get_mariadb_versions()
-	if versions['major'] <= '10.2':
+	if versions['provider'] == 'google':
+		expected_variables = expected_settings_google_8_0_later
+	elif versions['major'] <= '10.2':
 		expected_variables = expected_settings_10_2_earlier
 	else:
 		expected_variables = expected_settings_10_3_later
 
-	mariadb_variables = frappe._dict(frappe.db.sql("""show variables"""))
+	# mariadb_variables = frappe._dict(frappe.db.sql("""show variables"""))
 	# Check each expected value vs. actuals:
 	result = True
 	for key, expected_value in expected_variables.items():
-		if mariadb_variables.get(key) != expected_value:
+		db_var = None
+		if key == 'character_set_server' and db_name:
+			db_var = frappe.db.sql(f"""
+				SELECT default_character_set_name 
+				FROM information_schema.schemata
+				WHERE schema_name = '{db_name}';""")[0][0]
+		elif key == 'collation_server' and db_name:
+			db_var = frappe.db.sql(f"""
+				SELECT default_collation_name 
+				FROM information_schema.schemata
+				WHERE schema_name = '{db_name}';""")[0][0]
+		else:
+			db_var = frappe.db.sql(f"""SELECT @@{key};""")[0][0]
+		if db_var != expected_value:
 			print("For key %s. Expected value %s, found value %s" %
-				  (key, expected_value, mariadb_variables.get(key)))
+				  (key, expected_value, db_var))
 			result = False
 	if not result:
 		site = frappe.local.site

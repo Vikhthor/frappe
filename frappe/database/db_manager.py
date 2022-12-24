@@ -41,6 +41,9 @@ class DbManager:
 
 		self.db.sql("CREATE DATABASE `%s` ;" % target)
 
+		if self.db.sql("SELECT version()")[0][0].split('-')[1]=='google':
+			self.db.sql("ALTER DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" % target)
+
 	def drop_database(self, target):
 		self.db.sql("DROP DATABASE IF EXISTS `%s`;" % target)
 

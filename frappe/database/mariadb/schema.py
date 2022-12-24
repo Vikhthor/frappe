@@ -34,7 +34,7 @@ class MariaDBTable(DBTable):
 			ROW_FORMAT=COMPRESSED
 			CHARACTER SET=utf8mb4
 			COLLATE=utf8mb4_unicode_ci""".format(varchar_len=frappe.db.VARCHAR_LEN,
-				engine=self.meta.get("engine") or 'InnoDB') % (self.table_name, add_text))
+				engine='InnoDB') % (self.table_name, add_text))
 
 	def alter(self):
 		for col in self.columns.values():
